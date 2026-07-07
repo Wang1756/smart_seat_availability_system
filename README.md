@@ -44,3 +44,5 @@ Connect the Load Cell via the HX711, the HC-SR501 PIR sensor, the HC-SR04 Ultras
 	1. Open the HTML file in a text editor.
 	2. Replace the firebaseConfig variables with your project details.
 	3. Open the HTML file in a web browser to view the live dashboard.
+
+<em>For the circuit diagram you can see from the Wokwi simulator https://wokwi.com/projects/449698239678167041</em>

@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>McDonald's Smart Seat</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+    <style>
+        :root {
+            --mcd-red: #DA291C;
+            --mcd-yellow: #FFC72C;
+            --status-green: #2ecc71;
+            --status-red: #e74c3c;
+            --status-yellow: #f1c40f;
+            --status-blue: #3498db;
+            --bg-grey: #ecf0f1;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: white;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            color: #333;
+        }
+
+        header {
+            background-color: var(--mcd-red);
+            height: 70px;
+            display: flex;
+            align-items: center;
+            padding-left: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+        
+        .logo-img {
+            height: 50px;
+            width: auto;
+            padding: 5px 12px;
+            border-radius: 1px;
+        }
+
+        .yellow-strip {
+            height: 8px;
+            background-color: var(--mcd-yellow);
+            width: 100%;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 25px;
+            background-color: var(--bg-grey);
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        @media (min-width: 768px) {
+            .container {
+                flex-direction: row;
+                height: 100%;
+            }
+            .floor-plan {
+                flex: 3;
+            }
+            .control-panel {
+                flex: 1;
+            }
+        }
+
+        .floor-plan {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            background: 
+                linear-gradient(to right, #e0e0e0 10%, transparent 1%),
+                linear-gradient(to bottom, #e0e0e0 15%, transparent 15%);
+            background-color: white;
+        }
+
+        .control-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            border: 1px solid #eee;
+        }
+
+        h2 { 
+            font-size: 1.5rem; 
+            margin-bottom: 25px; 
+            color: #333; 
+            font-weight: 700;
+        }
+
+        .info-box {
+            width: 100%;
+            text-align: center;
+        }
+
+        .label-text {
+            color: #95a5a6;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: bold;
+        }
+
+        .table-display-number {
+            font-size: 90px;
+            font-weight: 800;
+            margin: 10px 0;
+            color: #2c3e50;
+        }
+
+        .status-message {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--status-red);
+            min-height: 40px;
+            margin-bottom: 10px;
+        }
+
+        .btn-submit {
+            background-color: #ecf0f1;
+            color: #bdc3c7;
+            font-size: 18px;
+            font-weight: 600;
+            padding: 15px;
+            width: 100%;
+            border: none;
+            border-radius: 8px;
+            margin-top: 15px;
+            cursor: not-allowed;
+            transition: all 0.2s ease;
+        }
+
+        .btn-submit.active {
+            background-color: var(--mcd-yellow);
+            color: black;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(255, 199, 44, 0.3);
+        }
+        
+        .btn-submit.active:hover { transform: translateY(-2px); }
+
+        .table {
+            position: absolute;
+            width: 5%;
+            aspect-ratio: 1 / 1;
+            background-color: var(--status-green);
+            border-radius: 20%;
+            cursor: pointer;
+            z-index: 10;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid rgba(0,0,0,0.1);
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .table.booth { width: 10%; aspect-ratio: 2 / 1; }
+        .table.booth-vertical { width: 5%; aspect-ratio: 1 / 2; }
+
+        .table:hover { 
+            transform: scale(1.1); 
+            box-shadow: 0 5px 10px rgba(0,0,0,0.1);
+        }
+
+        .table.occupied { 
+            background-color: var(--status-red); 
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .table.dirty {
+            background-color: var(--status-yellow);
+        }
+        
+        .table.dirty::after {
+            content: '!';
+            position: absolute;
+            top: -10%; right: -10%;
+            background-color: white;
+            color: orange;
+            font-size: 1.2vw;
+            font-weight: 900;
+            width: 30%; height: 30%;
+            border-radius: 50%;
+            border: 2px solid orange;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .table.reserved {
+            background-color: var(--status-blue);
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        .table.selected {
+            transform: scale(1.15);
+            box-shadow: 0 0 0 4px #333;
+            z-index: 20;
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <img src="https://cdn.produkto.io/photos/2025/05/04/mcdonalds-logo-2006.webp" alt="McDonald's" class="logo-img">
+    </header>
+    <div class="yellow-strip"></div>
+
+    <div class="container">
+        <div class="floor-plan" id="map-container">
+            <div style="position: absolute; top: 2%; left: 2%; color: #aaa; font-size: 1.5vw; font-weight: bold; letter-spacing: 1px;">KITCHEN</div>
+            <div style="position: absolute; top: 48%; left: 85%; color: #aaa; font-size: 1vw; font-weight: bold; letter-spacing: 1px; transform: rotate(270deg); transform-origin: center; white-space: nowrap;">ENTRANCE</div>
+        </div>
+
+        <div class="control-panel">
+            <h2>Select Table</h2>
+            
+            <div class="info-box">
+                <div class="label-text">Table Number</div>
+                <div class="table-display-number" id="disp-num">--</div>
+                <div class="status-message" id="disp-msg">Please select a table</div>
+                <button class="btn-submit" id="btn-submit" onclick="submitReservation()">Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDjq8ptsydQSVZeOsaqajkIyprU22eQZrc",
+            authDomain: "mcduduk.firebaseapp.com",
+            databaseURL: "https://mcduduk-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "mcduduk",
+            storageBucket: "mcduduk.firebasestorage.app",
+            messagingSenderId: "778554775060",
+            appId: "1:778554775060:web:db26ddc2fbc7561d35b901"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+
+        const tablesConfig = [
+            { id: 1, type: 'single', top: 20, left: 15, status: 'dirty' },
+            { id: 2, type: 'single', top: 40, left: 15, status: 'dirty' },
+            { id: 3, type: 'single', top: 60, left: 15, status: 'occupied' },
+            { id: 4, type: 'single', top: 80, left: 15, status: 'available' },
+            { id: 5, type: 'booth', top: 30, left: 35, status: 'available' },
+            { id: 6, type: 'booth', top: 40, left: 35, status: 'available' },
+            { id: 7, type: 'booth', top: 65, left: 60, status: 'available' },
+            { id: 19, type: 'booth', top: 65, left: 49, status: 'available' },
+            { id: 9, type: 'booth-vertical', top: 60, left: 75, status: 'available' },
+            { id: 12, type: 'single', top: 20, left: 69, status: 'available' },
+            { id: 13, type: 'single', top: 20, left: 75, status: 'occupied' },
+            { id: 14, type: 'single', top: 30, left: 69, status: 'occupied' },
+            { id: 15, type: 'single', top: 30, left: 75, status: 'occupied' },
+            { id: 11, type: 'single', top: 80, left: 60, status: 'available' },
+            { id: 8, type: 'single', top: 80, left: 45, status: 'dirty' },
+            { id: 18, type: 'single', top: 80, left:75, status: 'dirty' },
+            { id: 16, type: 'single', top: 40, left: 55, status: 'occupied' },
+            { id: 17, type: 'single', top: 50, left: 55, status: 'dirty' },
+        ];
+
+        let currentSelection = null;
+        let liveStatuses = {}; 
+
+        window.onload = function() {
+            const mapContainer = document.getElementById('map-container');
+
+            tablesConfig.forEach(table => {
+                const el = document.createElement('div');
+                el.classList.add('table');
+                
+                if (table.type === 'booth') el.classList.add('booth');
+                if (table.type === 'booth-vertical') el.classList.add('booth-vertical');
+                
+                if (table.status === 'occupied') el.classList.add('occupied');
+                if (table.status === 'dirty') el.classList.add('dirty');
+
+                el.style.top = table.top + '%';
+                el.style.left = table.left + '%';
+                
+                el.onclick = () => {
+                    let statusToUse = liveStatuses[table.id] || table.status;
+                    selectTable(table.id, statusToUse);
+                };
+                el.id = 't' + table.id;
+                
+                mapContainer.appendChild(el);
+            });
+
+            const tablesRef = db.ref('tables');
+            tablesRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if(data) {
+                    Object.keys(data).forEach(key => {
+                        const tableId = key.replace('t', ''); 
+                        const status = data[key].status;
+                        
+                        liveStatuses[tableId] = status;
+                        updateTableVisuals(tableId, status);
+                        
+                        if (currentSelection == tableId) {
+                            updateUI(tableId, status);
+                        }
+                    });
+                }
+            });
+        };
+
+        function updateTableVisuals(id, status) {
+            const el = document.getElementById('t' + id);
+            if(!el) return;
+
+            const isSelected = el.classList.contains('selected');
+
+            el.className = 'table';
+            
+            const config = tablesConfig.find(t => t.id == id);
+            if (config) {
+                if (config.type === 'booth') el.classList.add('booth');
+                if (config.type === 'booth-vertical') el.classList.add('booth-vertical');
+            }
+
+            if (status === 'occupied') el.classList.add('occupied');
+            if (status === 'dirty') el.classList.add('dirty');
+            if (status === 'reserved') el.classList.add('reserved');
+
+            if (isSelected) el.classList.add('selected');
+        }
+
+        function selectTable(tableId, status) {
+            if (currentSelection) {
+                const prev = document.getElementById('t' + currentSelection);
+                if (prev) prev.classList.remove('selected');
+            }
+
+            currentSelection = tableId;
+            const current = document.getElementById('t' + tableId);
+            current.classList.add('selected');
+
+            updateUI(tableId, status);
+        }
+
+        function updateUI(id, status) {
+            const dispNum = document.getElementById('disp-num');
+            const dispMsg = document.getElementById('disp-msg');
+            const btn = document.getElementById('btn-submit');
+
+            dispNum.innerText = id;
+            btn.className = "btn-submit";
+            btn.disabled = true;
+
+            if (status === 'occupied') {
+                dispMsg.innerText = "Table Occupied. Choose another.";
+                dispMsg.style.color = "var(--status-red)";
+                btn.innerText = "Unavailable";
+            } 
+            else if (status === 'reserved') {
+                dispMsg.innerText = "Table Reserved. Sit within 10s.";
+                dispMsg.style.color = "var(--status-blue)";
+                btn.innerText = "Reserved";
+            }
+            else if (status === 'dirty') {
+                dispMsg.innerText = "Table is dirty. Reserve to request cleaning.";
+                dispMsg.style.color = "orange";
+                btn.classList.add('active');
+                btn.disabled = false;
+                btn.innerText = "Reserve Table";
+            }
+            else {
+                dispMsg.innerText = "Table Available.";
+                dispMsg.style.color = "var(--status-green)";
+                btn.classList.add('active');
+                btn.disabled = false;
+                btn.innerText = "Reserve Table";
+            }
+        }
+
+        function submitReservation() {
+            if (!currentSelection) return;
+
+            const currentStatus = liveStatuses[currentSelection] || 'available';
+
+            if (currentStatus === 'available' || currentStatus === 'dirty') {
+                let targetTable = currentSelection;
+                db.ref('tables/t' + targetTable + '/status').set('reserved');
+                alert(`Table ${targetTable} Reserved! You have 10 seconds to sit.`);
+
+                setTimeout(() => {
+                    if (liveStatuses[targetTable] === 'reserved') {
+                        db.ref('tables/t' + targetTable + '/status').set('available');
+                    }
+                }, 10000);
+            }
+            else {
+                alert(`Cannot reserve Table ${currentSelection} (Status: ${currentStatus})`);
+            }
+        }
+    </script>
+</body>
+</html>
